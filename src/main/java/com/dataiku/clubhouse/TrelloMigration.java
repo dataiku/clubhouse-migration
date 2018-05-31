@@ -55,7 +55,7 @@ public class TrelloMigration {
     private final TrelloUserMapping userMapping;
     private boolean dryRun;
 
-    public TrelloMigration(ClubhouseClient clubhouseClient, String clubhouseProjectName, Trello trelloClient, String trelloOrganization, TrelloMigrationParams migrationParams) {
+    public TrelloMigration(ClubhouseClient clubhouseClient, String clubhouseProjectName, Trello trelloClient, String trelloOrganization, TrelloMigrationParams migrationParams) throws IOException {
         this.storiesService = new StoriesService(clubhouseClient);
         this.epicsService = new EpicsService(clubhouseClient);
         this.linkedFileService = new LinkedFilesService(clubhouseClient);
@@ -81,9 +81,9 @@ public class TrelloMigration {
         return dryRun;
     }
 
-    public void run() {
+    public void run(int threads) {
         logger.info("Starting migration...");
-        ExecutorService executor = Executors.newFixedThreadPool(32);
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
         scheduleMigrationTasks(executor);
         executor.shutdown();
         logger.info("Waiting for completion of pending tasks...");
@@ -268,7 +268,7 @@ public class TrelloMigration {
         return result;
     }
 
-    private Long migrateEpic(Card card, Board board, org.trello4j.model.List list) {
+    private Long migrateEpic(Card card, Board board, org.trello4j.model.List list) throws IOException {
         if (dryRun) {
             return null;
         }
@@ -291,7 +291,7 @@ public class TrelloMigration {
         return board.getName();
     }
 
-    private EpicSlim getOrCreateEpic(String epicName) {
+    private EpicSlim getOrCreateEpic(String epicName) throws IOException {
         synchronized (epicList) {
             return MigrationHelpers.getOrCreateEpic(epicsService, epicList, epicName);
         }
@@ -315,7 +315,7 @@ public class TrelloMigration {
         return migrationParams.labelsMapping.getOrDefault(name, name);
     }
 
-    private List<Long> migrateAttachments(Card card) {
+    private List<Long> migrateAttachments(Card card) throws IOException {
         List<Long> result = new ArrayList<>();
         for (Card.Attachment attachment : trelloClient.getAttachmentsByCard(card.getId())) {
             CreateLinkedFileParams createLinkedFile = new CreateLinkedFileParams();
@@ -364,21 +364,21 @@ public class TrelloMigration {
         @Override
         @SuppressWarnings("squid:S2629")
         public void run() {
-            // Checking issue in ClubHouse to see if it is not already present.
-            StorySlim existingStory = findTrelloCardInClubhouse(card);
-            if (existingStory == null) {
-                try {
+            try {
+                // Checking issue in ClubHouse to see if it is not already present.
+                StorySlim existingStory = findTrelloCardInClubhouse(card);
+                if (existingStory == null) {
                     migrateTrelloCard(board, list, card);
-                } catch (Exception e) {
-                    logger.log(Level.WARNING, "Failed to migrate card #" + card.getId(), e);
+                    logger.log(Level.INFO, "Migrated issue #" + card.getName());
+                } else {
+                    logger.log(Level.INFO, "Skipping issue #" + card.getName() + ": already migrated to Clubhouse with id=" + existingStory.id);
                 }
-                logger.log(Level.INFO, "Migrated issue #" + card.getName());
-            } else {
-                logger.log(Level.INFO, "Skipping issue #" + card.getName() + ": already migrated to Clubhouse with id=" + existingStory.id);
+            } catch (IOException e) {
+                logger.log(Level.WARNING, "Failed to migrate card #" + card.getId(), e);
             }
         }
 
-        private StorySlim findTrelloCardInClubhouse(Card card) {
+        private StorySlim findTrelloCardInClubhouse(Card card) throws IOException {
             if (dryRun) {
                 return null;
             }

@@ -1,5 +1,6 @@
 package com.dataiku.clubhouse;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -27,27 +28,39 @@ public class ClubhouseCleaner {
         this.milestonesService = new MilestonesService(clubhouseClient);
     }
 
-    public void run() {
+    public void run() throws IOException {
         ExecutorService executor = Executors.newFixedThreadPool(32);
         logger.info("Deleting labels...");
         for (Label label : labelsService.listLabels()) {
             executor.submit(() -> {
                 logger.info("Deleting label " + label.id + " > " + label.name);
-                labelsService.deleteLabel(label.id);
+                try {
+                    labelsService.deleteLabel(label.id);
+                } catch (IOException e) {
+                    logger.warning("Failed to delete label " + label.id + " > " + label.name);
+                }
             });
         }
         logger.info("Deleting epics...");
         for (EpicSlim epic : epicsService.listEpics()) {
             executor.submit(() -> {
                 logger.info("Deleting epic " + epic.id + " > " + epic.name);
-                epicsService.deleteEpic(epic.id);
+                try {
+                    epicsService.deleteEpic(epic.id);
+                } catch (IOException e) {
+                    logger.warning("Failed to delete epic " + epic.id + " > " + epic.name);
+                }
             });
         }
         logger.info("Deleting milestones...");
         for (Milestone milestone : milestonesService.listMilestones()) {
             executor.submit(() -> {
                 logger.info("Deleting milestone " + milestone.id + " > " + milestone.name);
-                milestonesService.deleteMilestone(milestone.id);
+                try {
+                    milestonesService.deleteMilestone(milestone.id);
+                } catch (IOException e) {
+                    logger.warning("Failed to delete milestone " + milestone.id + " > " + milestone.name);
+                }
             });
         }
         logger.info("Deleting stories...");

@@ -1,5 +1,6 @@
 package com.dataiku.clubhouse;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -23,7 +24,7 @@ public class Housekeeping {
     private final EpicState epicFinishedState;
     private final MilestonesService chMilestonesService;
 
-    public Housekeeping(ClubhouseClient clubhouseClient) {
+    public Housekeeping(ClubhouseClient clubhouseClient) throws IOException {
         chStoriesService = new StoriesService(clubhouseClient);
         chEpicsService = new EpicsService(clubhouseClient);
         chMilestonesService = new MilestonesService(clubhouseClient);
@@ -32,12 +33,12 @@ public class Housekeeping {
         epicFinishedState = getEpicFinishedState();
     }
 
-    public void archiveCompletedEpicsAndStories(Duration closeDelay) {
+    public void archiveCompletedEpicsAndStories(Duration closeDelay) throws IOException {
         archiveCompletedStories(closeDelay);
         archiveCompletedEpics(closeDelay);
     }
 
-    public void archiveCompletedStories(Duration closeDelay) {
+    public void archiveCompletedStories(Duration closeDelay) throws IOException {
         SearchStoriesParams params = new SearchStoriesParams();
         params.archived = false;
         params.completed_at_end = Instant.now().minus(closeDelay);
@@ -46,7 +47,13 @@ public class Housekeeping {
 
         ExecutorService executor = Executors.newFixedThreadPool(32);
         for (StorySlim story : storiesToArchive) {
-            executor.submit(() -> archiveStory(story));
+            executor.submit(() -> {
+                try {
+                    archiveStory(story);
+                } catch (IOException e) {
+                    logger.warning("Failed to archive story " + story.id + " > " + story.name);
+                }
+            });
         }
         executor.shutdown();
         try {
@@ -58,14 +65,14 @@ public class Housekeeping {
 
     }
 
-    private void archiveStory(StorySlim story) {
+    private void archiveStory(StorySlim story) throws IOException {
         UpdateStoryParams updateStoryParams = new UpdateStoryParams();
         updateStoryParams.archived = true;
         logger.log(Level.INFO, "Archiving story " + story.id);
         chStoriesService.updateStory(story.id, updateStoryParams);
     }
 
-    public void closeCompletedEpics() {
+    public void closeCompletedEpics() throws IOException {
         List<EpicSlim> epics = chEpicsService.listEpics();
         List<EpicSlim> epicsToClose = epics.stream().filter(epic -> nonArchived(epic) && doneButNotComplete(epic)).collect(Collectors.toList());
 
@@ -78,7 +85,7 @@ public class Housekeeping {
         }
     }
 
-    public void createMilestonesFromEpics() {
+    public void createMilestonesFromEpics() throws IOException {
         List<Milestone> milestones = chMilestonesService.listMilestones();
 
         List<EpicSlim> epics = chEpicsService.listEpics();
@@ -139,7 +146,7 @@ public class Housekeeping {
         }
     }
 
-    private void archiveCompletedEpics(Duration closeDelay) {
+    private void archiveCompletedEpics(Duration closeDelay) throws IOException {
         Instant deadline = Instant.now().minus(closeDelay);
         List<EpicSlim> epics = chEpicsService.listEpics();
         List<EpicSlim> epicsToArchive = epics.stream().filter(epic -> nonArchived(epic) && completedBefore(epic, deadline)).collect(Collectors.toList());
@@ -153,7 +160,7 @@ public class Housekeeping {
         }
     }
 
-    public void archiveEpics(String prefix) {
+    public void archiveEpics(String prefix) throws IOException {
         List<EpicSlim> epics = chEpicsService.listEpics();
         List<EpicSlim> epicsToArchive = epics.stream().filter(epic -> nonArchived(epic) && epic.name.startsWith(prefix)).collect(Collectors.toList());
         logger.log(Level.INFO, "Archiving " + epicsToArchive.size() + " epics");
@@ -180,7 +187,7 @@ public class Housekeeping {
         return epic.archived != null && !epic.archived;
     }
 
-    private EpicState getEpicFinishedState() {
+    private EpicState getEpicFinishedState() throws IOException {
         EpicWorkflow epicWorkflow = chEpicWorkflowService.getEpicWorkflow();
         for (EpicState epicState : epicWorkflow.epic_states) {
             if ("done".equalsIgnoreCase(epicState.type)) {

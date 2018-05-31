@@ -30,7 +30,7 @@ public class TrelloUserMapping {
     private final Cache<String, Member> mappingCache = CacheBuilder.newBuilder().build();
     private final LoadingCache<String, String> githubUserCache = CacheBuilder.newBuilder().build(new TrelloUserDisplayNameLoader());
 
-    public TrelloUserMapping(ClubhouseClient chClient, Trello trelloClient, Map<String, String> userMappings) {
+    public TrelloUserMapping(ClubhouseClient chClient, Trello trelloClient, Map<String, String> userMappings) throws IOException {
         this.members = new UsersService(chClient).listMembers();
         this.clubhouseNameByTrelloLogin.putAll(userMappings);
         this.trelloClient = trelloClient;

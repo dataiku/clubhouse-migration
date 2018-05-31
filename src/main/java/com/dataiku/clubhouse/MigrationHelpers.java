@@ -1,5 +1,6 @@
 package com.dataiku.clubhouse;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,14 +18,14 @@ import io.clubhouse4j.api.v3beta.WorkflowState;
 
 public class MigrationHelpers {
 
-    public static Project getProject(ProjectsService projectsService, String projectName) {
+    public static Project getProject(ProjectsService projectsService, String projectName) throws IOException {
         return projectsService.listProjects().stream()
                 .filter(p -> projectName.equals(p.name))
                 .findAny()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown project on Clubhouse: " + projectName));
     }
 
-    public static EpicSlim getOrCreateEpic(EpicsService chEpicsService, List<EpicSlim> chEpicList, String epicName) {
+    public static EpicSlim getOrCreateEpic(EpicsService chEpicsService, List<EpicSlim> chEpicList, String epicName) throws IOException {
         EpicSlim epic = getEpic(chEpicList, epicName);
         if (epic == null) {
             CreateEpicParams params = new CreateEpicParams();
@@ -45,7 +46,7 @@ public class MigrationHelpers {
         return null;
     }
 
-    public static WorkflowState getStoryState(TeamsService teamsService, Project project, String stateName) {
+    public static WorkflowState getStoryState(TeamsService teamsService, Project project, String stateName) throws IOException {
         Team team = teamsService.getTeam(project.team_id);
         if (team == null) {
             throw new IllegalStateException("Unknown team: " + project.team_id);
@@ -59,7 +60,7 @@ public class MigrationHelpers {
         throw new IllegalArgumentException("Cannot find the state '" + stateName + "'for project " + project.name);
     }
 
-    public static List<WorkflowState> getWorkflowStates(TeamsService teamsService, Project project) {
+    public static List<WorkflowState> getWorkflowStates(TeamsService teamsService, Project project) throws IOException {
         Team team = teamsService.getTeam(project.team_id);
         if (team == null) {
             throw new IllegalStateException("Unknown team: " + project.team_id);
@@ -67,7 +68,7 @@ public class MigrationHelpers {
         return team.workflow.states;
     }
 
-    public static Map<String, WorkflowState> getWorkflowStatesMap(TeamsService teamsService, Project project) {
+    public static Map<String, WorkflowState> getWorkflowStatesMap(TeamsService teamsService, Project project) throws IOException {
         Map<String, WorkflowState> workflowStates = new HashMap<>();
         for (WorkflowState workflowState : getWorkflowStates(teamsService, project)) {
             workflowStates.put(workflowState.name, workflowState);

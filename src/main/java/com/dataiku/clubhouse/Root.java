@@ -1,9 +1,5 @@
 package com.dataiku.clubhouse;
 
-import static com.dataiku.clubhouse.Credentials.CH_TOKEN;
-import static com.dataiku.clubhouse.Credentials.GH_TOKEN;
-import static com.dataiku.clubhouse.Credentials.TRELLO_API_KEY;
-import static com.dataiku.clubhouse.Credentials.TRELLO_TOKEN;
 import static com.dataiku.clubhouse.GithubMigration.IssueState.ALL;
 
 import java.io.BufferedReader;
@@ -13,6 +9,8 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Date;
 import java.util.logging.ConsoleHandler;
+import java.util.logging.FileHandler;
+import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -33,33 +31,45 @@ import io.clubhouse4j.api.v3beta.GsonHelper;
 public class Root {
 
     private static final Logger logger = Logger.getLogger("com.dataiku");
+    private static final LogFormatter LOG_FORMATTER = new LogFormatter();
 
     static {
-        configureLogger(logger);
+        configureLogger();
     }
 
     public static void main(String[] args) throws IOException {
-        boolean migrationTrello = false;
+        logger.info("Starting...");
+        Credentials credentials = loadCredentials();
+        boolean migrationTrello = true;
         boolean migrationGithub = true;
         boolean dryRun = true;
 
+        ClubhouseClient clubhouseClient = new ClubhouseClient(credentials.clubhouseToken);
         if (migrationTrello) {
+            Trello trelloClient = new TrelloImpl(credentials.trelloApiKey, credentials.trelloToken);
             TrelloMigrationParams trelloMigrationParams = loadTrelloMigrationParams();
-            TrelloMigration trelloMigration = new TrelloMigration(clubhouseClient(), "DIP", trelloClient(), "dataikurd", trelloMigrationParams);
+            TrelloMigration trelloMigration = new TrelloMigration(clubhouseClient, "DIP", trelloClient, "dataikurd", trelloMigrationParams);
             trelloMigration.setDryRun(dryRun);
-            trelloMigration.run();
+            trelloMigration.run(32);
         }
         if (migrationGithub) {
             GithubMigrationParams githubMigrationParams = loadGithubMigrationParams();
-            GithubMigration githubMigration = new GithubMigration(clubhouseClient(), "DIP", gitHubClient(), "dip", githubMigrationParams);
+            GitHubClient githubClient = gitHubClient(credentials.githubToken);
+            GithubMigration githubMigration = new GithubMigration(clubhouseClient, "DIP", githubClient, "dip", githubMigrationParams);
             githubMigration.setDryRun(dryRun);
-            githubMigration.migrateGithubIssues(ALL);
+            githubMigration.run(4, ALL);
         }
 
         if (!dryRun) {
-            Housekeeping housekeeping = new Housekeeping(clubhouseClient());
+            Housekeeping housekeeping = new Housekeeping(clubhouseClient);
             housekeeping.closeCompletedEpics();
             housekeeping.createMilestonesFromEpics();
+        }
+    }
+
+    private static Credentials loadCredentials() throws IOException {
+        try (BufferedReader bufferedReader = Files.newReader(new File("credentials.json"), Charsets.UTF_8)) {
+            return GsonHelper.GSON.fromJson(bufferedReader, Credentials.class);
         }
     }
 
@@ -75,43 +85,52 @@ public class Root {
         }
     }
 
-    private static Trello trelloClient() {
-        return new TrelloImpl(TRELLO_API_KEY, TRELLO_TOKEN);
-    }
-
-    private static ClubhouseClient clubhouseClient() {
-        return new ClubhouseClient(CH_TOKEN);
-    }
-
-    private static GitHubClient gitHubClient() {
+    private static GitHubClient gitHubClient(String token) {
         GitHubClient client = new GitHubClient();
-        client.setOAuth2Token(GH_TOKEN);
+        client.setOAuth2Token(token);
         return client;
     }
 
-    private static void configureLogger(Logger logger) {
-        ConsoleHandler ch = new ConsoleHandler();
-        ch.setFormatter(new SimpleFormatter() {
-            private static final String FORMAT = "[%1$tF %1$tT] [%2$-7s] %3$s - %4$s %n";
-
-            @Override
-            public synchronized String format(LogRecord record) {
-                String msg = String.format(FORMAT,
-                        new Date(record.getMillis()),
-                        record.getLevel().getLocalizedName(),
-                        record.getLoggerName(),
-                        record.getMessage());
-                Throwable exception = record.getThrown();
-                if (exception != null) {
-                    StringWriter sw = new StringWriter();
-                    exception.printStackTrace(new PrintWriter(sw));
-                    msg += sw.toString();
-                }
-                return msg;
-            }
-        });
-        Root.logger.setUseParentHandlers(false);
-        logger.addHandler(ch);
+    private static void configureLogger() {
         Root.logger.setLevel(Level.INFO);
+        Root.logger.setUseParentHandlers(false);
+        Handler[] handlers = Root.logger.getHandlers();
+        if (handlers != null && handlers.length > 0) {
+            for (Handler handler : handlers) {
+                Root.logger.removeHandler(handler);
+            }
+        }
+
+        ConsoleHandler consoleHandler = new ConsoleHandler();
+        consoleHandler.setFormatter(LOG_FORMATTER);
+        Root.logger.addHandler(consoleHandler);
+
+        try {
+            FileHandler fileHandler = new FileHandler("clubhouse-migration.log", true);
+            fileHandler.setFormatter(LOG_FORMATTER);
+            Root.logger.addHandler(fileHandler);
+        } catch (IOException e) {
+            // Do not log into file
+        }
+    }
+
+    private static class LogFormatter extends SimpleFormatter {
+        private static final String FORMAT = "[%1$tF %1$tT] [%2$-7s] %3$s - %4$s %n";
+
+        @Override
+        public synchronized String format(LogRecord record) {
+            String msg = String.format(FORMAT,
+                    new Date(record.getMillis()),
+                    record.getLevel().getLocalizedName(),
+                    record.getLoggerName(),
+                    record.getMessage());
+            Throwable exception = record.getThrown();
+            if (exception != null) {
+                StringWriter sw = new StringWriter();
+                exception.printStackTrace(new PrintWriter(sw));
+                msg += sw.toString();
+            }
+            return msg;
+        }
     }
 }

@@ -86,11 +86,11 @@ public class GithubMigration {
         return dryRun;
     }
 
-    public void migrateGithubIssues() {
-        migrateGithubIssues(IssueState.OPEN);
+    public void run(int threads) {
+        run(threads, IssueState.OPEN);
     }
 
-    public void migrateGithubIssues(IssueState issueState) {
+    public void run(int threads, IssueState issueState) {
         logger.info("Collecting issues to migrate.");
         Map<String, String> filterData = new HashMap<>();
         if (issueState != null) {
@@ -108,7 +108,7 @@ public class GithubMigration {
         }
 
         logger.info("Migrating the Github issues.");
-        ExecutorService executor = Executors.newFixedThreadPool(32);
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
         for (Issue issue : issuesToMigrate.values()) {
             executor.submit(new MigrateGithubIssueRunnable(issue));
         }
@@ -204,7 +204,7 @@ public class GithubMigration {
         return result;
     }
 
-    private Long migrateEpic(Issue githubIssue) {
+    private Long migrateEpic(Issue githubIssue) throws IOException {
         if (dryRun) {
             return null;
         }
@@ -307,7 +307,7 @@ public class GithubMigration {
             } while (retry);
         }
 
-        private StorySlim findGithubIssueInClubhouse(Issue githubIssue) {
+        private StorySlim findGithubIssueInClubhouse(Issue githubIssue) throws IOException {
             if (!dryRun) {
                 SearchStoriesParams searchStoriesParams = new SearchStoriesParams();
                 searchStoriesParams.external_id = githubIssue.getHtmlUrl();

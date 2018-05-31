@@ -36,7 +36,7 @@ public class GithubUserMapping {
     private final LoadingCache<String, String> githubUserCache = CacheBuilder.newBuilder().build(new GithubUserDisplayNameLoader());
     private UserService userService;
 
-    public GithubUserMapping(ClubhouseClient chClient, GitHubClient gitHubClient, Map<String, String> userMappings) {
+    public GithubUserMapping(ClubhouseClient chClient, GitHubClient gitHubClient, Map<String, String> userMappings) throws IOException {
         this.members = new UsersService(chClient).listMembers();
         this.githubClient = gitHubClient;
         this.clubhouseNameByGithubLogin.putAll(userMappings);
