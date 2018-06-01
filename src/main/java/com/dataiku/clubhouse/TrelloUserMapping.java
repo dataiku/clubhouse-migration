@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Logger;
 
 import org.trello4j.Trello;
 
@@ -23,6 +24,8 @@ import io.clubhouse4j.api.v3beta.UsersService;
 public class TrelloUserMapping {
 
     public static final Member UNKNOWN_MEMBER = new Member();
+
+    private static final Logger logger = Logger.getLogger("com.dataiku.clubhouse.migration.trello.user");
 
     private final Trello trelloClient;
     private final List<Member> members;
@@ -47,17 +50,15 @@ public class TrelloUserMapping {
             if (result.id != null) {
                 mappingCache.put(trelloUsername, result);
             } else {
-                org.trello4j.model.Member trelloMember2 = trelloClient.getMember(trelloUsername);
-                result = (trelloMember2 == null) ? UNKNOWN_MEMBER : findMember(trelloMember2);
-                if (trelloMember2 == null) {
-                    System.out.println("@@@ " + trelloMember.getUsername() + " > " + trelloMember.getFullName());
+                org.trello4j.model.Member actualTrelloMember = trelloClient.getMember(trelloUsername);
+                if (actualTrelloMember == null) {
+                    logger.warning("Missing trello->clubhouse user mapping for " + trelloMember.getUsername());
+                    result = UNKNOWN_MEMBER;
+                } else {
+                    result = findMember(actualTrelloMember);
                 }
                 mappingCache.put(trelloUsername, result);
             }
-        }
-
-        if (result.id == null) {
-            System.err.println("Missing trello->clubhouse user mapping for " + trelloMember.getUsername());
         }
         return result;
     }

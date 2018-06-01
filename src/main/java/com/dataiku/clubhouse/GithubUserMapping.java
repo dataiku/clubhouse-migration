@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Logger;
 
 import org.eclipse.egit.github.core.User;
 import org.eclipse.egit.github.core.client.GitHubClient;
@@ -22,6 +23,8 @@ import io.clubhouse4j.api.v3beta.UsersService;
 
 public class GithubUserMapping {
 
+    private static final Logger logger = Logger.getLogger("com.dataiku.clubhouse.migration.github.user");
+
     public static final Member UNKNOWN_MEMBER = new Member();
 
     private final GitHubClient githubClient;
@@ -34,13 +37,11 @@ public class GithubUserMapping {
         }
     });
     private final LoadingCache<String, String> githubUserCache = CacheBuilder.newBuilder().build(new GithubUserDisplayNameLoader());
-    private UserService userService;
 
     public GithubUserMapping(ClubhouseClient chClient, GitHubClient gitHubClient, Map<String, String> userMappings) throws IOException {
         this.members = new UsersService(chClient).listMembers();
         this.githubClient = gitHubClient;
         this.clubhouseNameByGithubLogin.putAll(userMappings);
-        userService = new UserService(githubClient);
     }
 
     public Member getClubhouseMember(User user) {
@@ -83,13 +84,7 @@ public class GithubUserMapping {
                 return member;
             }
         }
-        User user1;
-        try {
-            user1 = userService.getUser(user.getLogin());
-        } catch (IOException e) {
-            user1 = user;
-        }
-        System.err.println("Missing github->clubhouse user mapping for " + user.getLogin() + " (" + user1.getName() + ") @" + user1.getEmail());
+        logger.warning("Missing github->clubhouse user mapping for " + user.getLogin());
         return UNKNOWN_MEMBER;
     }
 
